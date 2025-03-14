@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container text-center mt-5">
+    <div class="card shadow-lg p-5 bg-light rounded">
+        <h1 class="display-4 text-dark fw-bold">Welcome to 3D Face Authentication</h1>
+        <p class="lead text-muted">Secure your identity with advanced 3D face recognition.</p>
+
+        <!-- 3D Hologram Section -->
+        <div id="hologram-container" style="width: 400px; height: 400px;"></div>
+
+        <div class="mt-4">
+            <a href="{% url 'login' %}" class="btn btn-primary btn-lg me-2 px-4">Login</a>
+            <a href="{% url 'register' %}" class="btn btn-success btn-lg px-4">Register</a>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/OBJLoader.js"></script>
+
+<!-- Load Three.js as a module -->
+<script type="module">
+    import * as THREE from "/static/js/three.module.js";
+    import { MTLLoader } from "/static/js/MTLLoader.js";
+    import { OBJLoader } from "/static/js/OBJLoader.js";
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 400 / 400, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true });
+        renderer.setSize(400, 400);
+        document.getElementById("hologram-container").appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // Load OBJ with MTL
+        const mtlLoader = new MTLLoader();
+        mtlLoader.load('/static/models/face.mtl', function (materials) {
+            materials.preload();
+            const objLoader = new OBJLoader();
+            objLoader.setMaterials(materials);
+            objLoader.load('/static/models/face.obj', function (object) {
+                object.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        child.geometry.computeVertexNormals(); // Fix shading
+                        child.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+                    }
+                });
+
+                object.scale.set(2, 2, 2);  // Adjust scale
+                object.position.set(0, -1, 0);
+                scene.add(object);
+            });
+        });
+
+        camera.position.z = 10;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+    });
+</script>
+{% endblock %}

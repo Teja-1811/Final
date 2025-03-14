@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Register{% endblock %}
+
+{% block content %}
+    <div class="container mt-4 p-4 border rounded">
+        <h2 class="text-center">Register</h2>
+        <form method="POST" enctype="multipart/form-data" id="registrationForm">
+            {% csrf_token %}
+            
+            <label for="name">Name:</label>
+            <input type="text" name="name" class="form-control" required>
+            
+            <label for="email">Email:</label>
+            <input type="email" name="email" class="form-control" required>
+            
+            <label for="password">Password:</label>
+            <input type="password" name="password" class="form-control" required>
+            
+            <input type="hidden" name="face_image" id="face_image">
+            
+            <div class="text-center mt-3" id="captureSection">
+                <h4>Live Face Capture</h4>
+                <video id="video" class="border rounded" autoplay></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                <img id="capturedImage" class="mt-2" style="display:none; max-width: 100%;"/>
+                <button type="button" id="capture" class="btn btn-primary mt-2">Capture Face</button>
+                <p id="livenessMessage" class="text-danger mt-2"></p>
+            </div>
+            
+            <button type="submit" class="btn btn-success mt-3 w-100" id="registerButton" disabled>Register</button>
+        </form>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const captureButton = document.getElementById('capture');
+        const canvas = document.getElementById('canvas');
+        const capturedImage = document.getElementById('capturedImage');
+        const faceImageInput = document.getElementById('face_image');
+        const registerButton = document.getElementById('registerButton');
+        const livenessMessage = document.getElementById('livenessMessage');
+        const captureSection = document.getElementById('captureSection');
+        
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => video.srcObject = stream)
+            .catch(err => console.error('Camera access denied:', err));
+
+        captureButton.addEventListener('click', () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = canvas.toDataURL('image/png');
+            faceImageInput.value = imageData;
+            
+            // Send captured image to backend for liveness verification
+            fetch("/verify-liveness/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.liveness) {
+                    livenessMessage.textContent = "Liveness Verified! You can now register.";
+                    livenessMessage.classList.remove("text-danger");
+                    livenessMessage.classList.add("text-success");
+                    registerButton.disabled = false;
+                    video.style.display = 'none';
+                    captureButton.style.display = 'none';
+                    capturedImage.src = imageData;
+                    capturedImage.style.display = 'block';
+                } else {
+                    alert("Spoof Detected! Please recapture until liveness is verified.");
+                    registerButton.disabled = true;
+                }
+            })
+            .catch(error => console.error("Error verifying liveness:", error));
+        });
+    </script>
+{% endblock %}

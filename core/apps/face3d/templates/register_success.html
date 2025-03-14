@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>Welcome, {{ request.user.username }}! 🎉</h2>
+    <p>Your 3D Face Model has been successfully generated.</p>
+    <div id="3d-container"></div>
+
+    <!-- Include Three.js and Loaders -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.8);
+            document.getElementById("3d-container").appendChild(renderer.domElement);
+    
+            // Lighting
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(2, 2, 5).normalize();
+            scene.add(light);
+    
+            // Correct file paths
+            const objUrl = "{{ user.face_3d_mesh.url }}";
+            const mtlUrl = "{{ user.face_mtl_file.url }}";
+
+            console.log("OBJ URL:", objUrl);
+            console.log("MTL URL:", mtlUrl);
+
+            // Load MTL first
+            const mtlLoader = new THREE.MTLLoader();
+            mtlLoader.load(mtlUrl, function (materials) {
+                materials.preload();
+                const objLoader = new THREE.OBJLoader();
+                objLoader.setMaterials(materials);
+    
+                objLoader.load(objUrl, function (object) {
+                    object.position.set(0, -0.5, 0);
+                    scene.add(object);
+                    camera.position.set(0, 0, 3);
+                }, 
+                function (xhr) {
+                    console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                },
+                function (error) {
+                    console.error('Error loading OBJ:', error);
+                });
+            }, function (error) {
+                console.error('Error loading MTL:', error);
+            });
+    
+            // Orbit Controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enableZoom = true;
+            controls.enableRotate = true;
+    
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+            animate();
+        });
+    </script>
+    
+{% endblock %}
+    

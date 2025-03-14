@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Face Verification{% endblock %}
+
+{% block content %}
+    <div class="container mt-4 p-4 border rounded">
+        <h2 class="text-center">Face Verification</h2>
+        
+        <div id="captureSection" class="text-center">
+            <h4>Live Face Capture</h4>
+            <video id="video" class="border rounded" autoplay></video>
+            <canvas id="canvas" style="display:none;"></canvas>
+            <img id="capturedImage" class="mt-2" style="display:none; max-width: 100%;"/>
+            <button type="button" id="capture" class="btn btn-primary mt-2">Capture Face</button>
+            <p id="livenessMessage" class="text-danger mt-2"></p>
+        </div>
+
+        <button type="button" class="btn btn-success mt-3 w-100" id="verifyButton" disabled>Verify Face</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const captureButton = document.getElementById('capture');
+        const canvas = document.getElementById('canvas');
+        const capturedImage = document.getElementById('capturedImage');
+        const verifyButton = document.getElementById('verifyButton');
+        const livenessMessage = document.getElementById('livenessMessage');
+        
+        let capturedImageData = null;
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => video.srcObject = stream)
+            .catch(err => console.error('Camera access denied:', err));
+
+        captureButton.addEventListener('click', () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            capturedImageData = canvas.toDataURL('image/png');
+            
+            // Send captured image to backend for liveness verification
+            fetch("/verify-liveness/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+                body: JSON.stringify({ image: capturedImageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.liveness) {
+                    livenessMessage.textContent = "Liveness Verified! You can now verify your face.";
+                    livenessMessage.classList.remove("text-danger");
+                    livenessMessage.classList.add("text-success");
+                    verifyButton.disabled = false;
+                    video.style.display = 'none';
+                    captureButton.style.display = 'none';
+                    capturedImage.src = capturedImageData;
+                    capturedImage.style.display = 'block';
+                } else {
+                    alert("Spoof Detected! Please recapture until liveness is verified.");
+                    verifyButton.disabled = true;
+                }
+            })
+            .catch(error => console.error("Error verifying liveness:", error));
+        });
+
+        verifyButton.addEventListener('click', () => {
+            if (!capturedImageData) {
+                alert("Please capture an image first.");
+                return;
+            }
+
+            fetch("/face-verify/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+                body: JSON.stringify({ image: capturedImageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Face Verified! Redirecting...");
+                    window.location.href = "/dashboard/";
+                } else {
+                    alert("Face Not Recognized. Try Again.");
+                }
+            });
+        });
+    </script>
+{% endblock %}
