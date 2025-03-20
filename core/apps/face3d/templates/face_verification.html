@@ -10,80 +10,138 @@
             <video id="video" class="border rounded" autoplay></video>
             <canvas id="canvas" style="display:none;"></canvas>
             <img id="capturedImage" class="mt-2" style="display:none; max-width: 100%;"/>
-            <button type="button" id="capture" class="btn btn-primary mt-2">Capture Face</button>
             <p id="livenessMessage" class="text-danger mt-2"></p>
+            <button type="button" id="capture" class="btn btn-primary mt-2" disabled>Capture Face</button>
         </div>
 
         <button type="button" class="btn btn-success mt-3 w-100" id="verifyButton" disabled>Verify Face</button>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
     <script>
-        const video = document.getElementById('video');
-        const captureButton = document.getElementById('capture');
-        const canvas = document.getElementById('canvas');
-        const capturedImage = document.getElementById('capturedImage');
-        const verifyButton = document.getElementById('verifyButton');
-        const livenessMessage = document.getElementById('livenessMessage');
+        async function loadModels() {
+            await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('/static/models');
+            console.log("✅ Face-API.js Models Loaded!");
+        }
         
-        let capturedImageData = null;
-
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => video.srcObject = stream)
-            .catch(err => console.error('Camera access denied:', err));
-
-        captureButton.addEventListener('click', () => {
-            const context = canvas.getContext('2d');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        document.addEventListener("DOMContentLoaded", async function () {
+            await loadModels();
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const capturedImage = document.getElementById('capturedImage');
+            const verifyButton = document.getElementById('verifyButton');
+            const livenessMessage = document.getElementById('livenessMessage');
+            const captureButton = document.getElementById('capture');
+            let blinkDetected = false;
+            let movementDetected = false;
+            let livenessVerified = false;
+            let capturedImageData = null;
             
-            capturedImageData = canvas.toDataURL('image/png');
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => video.srcObject = stream)
+                .catch(err => console.error('❌ Camera access denied:', err));
             
-            // Send captured image to backend for liveness verification
-            fetch("/verify-liveness/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
-                body: JSON.stringify({ image: capturedImageData })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.liveness) {
-                    livenessMessage.textContent = "Liveness Verified! You can now verify your face.";
-                    livenessMessage.classList.remove("text-danger");
-                    livenessMessage.classList.add("text-success");
-                    verifyButton.disabled = false;
-                    video.style.display = 'none';
-                    captureButton.style.display = 'none';
-                    capturedImage.src = capturedImageData;
-                    capturedImage.style.display = 'block';
-                } else {
-                    alert("Spoof Detected! Please recapture until liveness is verified.");
-                    verifyButton.disabled = true;
+            async function detectBlink() {
+                if (livenessVerified) return;
+                const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+                if (!detections) {
+                    livenessMessage.textContent = "❌ No face detected!";
+                    return;
                 }
-            })
-            .catch(error => console.error("Error verifying liveness:", error));
-        });
-
-        verifyButton.addEventListener('click', () => {
-            if (!capturedImageData) {
-                alert("Please capture an image first.");
-                return;
+                
+                const leftEye = detections.landmarks.getLeftEye();
+                const rightEye = detections.landmarks.getRightEye();
+                const leftEAR = calculateEAR(leftEye);
+                const rightEAR = calculateEAR(rightEye);
+                
+                const blinkThreshold = 0.25;
+                if (leftEAR < blinkThreshold && rightEAR < blinkThreshold) {
+                    console.log("✅ Blink detected!");
+                    blinkDetected = true;
+                    checkLiveness();
+                }
             }
 
-            fetch("/face-verify/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
-                body: JSON.stringify({ image: capturedImageData })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Face Verified! Redirecting...");
-                    window.location.href = "/dashboard/";
-                } else {
-                    alert("Face Not Recognized. Try Again.");
+            function calculateEAR(eye) {
+                const dist = (p1, p2) => Math.sqrt((p1._x - p2._x) ** 2 + (p1._y - p2._y) ** 2);
+                const vertical1 = dist(eye[1], eye[5]);
+                const vertical2 = dist(eye[2], eye[4]);
+                const horizontal = dist(eye[0], eye[3]);
+                return (vertical1 + vertical2) / (2.0 * horizontal);
+            }
+
+            async function detectMovement() {
+                if (livenessVerified) return;
+                const prevDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const newDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+                
+                if (prevDetection && newDetection) {
+                    const diffX = Math.abs(prevDetection.box.x - newDetection.box.x);
+                    const diffY = Math.abs(prevDetection.box.y - newDetection.box.y);
+                    if (diffX > 10 || diffY > 10) {
+                        console.log("✅ Head movement detected!");
+                        movementDetected = true;
+                        checkLiveness();
+                    }
                 }
+            }
+
+            function checkLiveness() {
+                if (blinkDetected && movementDetected) {
+                    livenessVerified = true;
+                    livenessMessage.textContent = "✅ Liveness Verified!";
+                    livenessMessage.classList.remove("text-danger");
+                    livenessMessage.classList.add("text-success");
+                    captureButton.disabled = false;
+                }
+            }
+
+            captureButton.addEventListener('click', () => {
+                if (!livenessVerified) return;
+                
+                const context = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                capturedImageData = canvas.toDataURL('image/png');
+                capturedImage.src = capturedImageData;
+                capturedImage.style.display = 'block';
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.style.display = 'none';
+                
+                livenessMessage.textContent = "✅ Face Captured! No Spoof Detected.";
+                verifyButton.disabled = false;
             });
+
+            verifyButton.addEventListener('click', () => {
+                if (!capturedImageData) {
+                    alert("Please capture an image first.");
+                    return;
+                }
+
+                fetch("/face-verify/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+                    body: JSON.stringify({ image: capturedImageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Face Verified! Welcome, ${data.username}! Redirecting...`);
+                        window.location.href = "/dashboard/?username=" + encodeURIComponent(data.username);
+                    } else {
+                        alert("Face Not Recognized. Try Again.");
+                    }
+                });
+            });
+
+            setInterval(detectBlink, 500);
+            setInterval(detectMovement, 1000);
         });
     </script>
 {% endblock %}

@@ -3,7 +3,6 @@ from django.db import models
 import json
 
 class CustomUser(AbstractUser):
-    name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     face_image = models.ImageField(upload_to="faces/", null=True, blank=True)  # Store face image path
     face_embedding = models.TextField(null=True, blank=True)  # Store face embeddings

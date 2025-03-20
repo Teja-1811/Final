@@ -2,73 +2,85 @@
 {% load static %}
 {% block title %}Home{% endblock %}
 
+{% block custom_css %}
+<style>
+    body {
+        background-color: #000;
+        color: white;
+    }
+
+    .scanner-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 30px;
+    }
+
+    .scanner-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 10px;
+        width: 300px;
+        height: 400px;
+        perspective: 800px; /* Creates depth effect */
+        transform-style: preserve-3d;
+        transform: rotateX(10deg); /* Slight 3D tilt */
+        box-shadow: 0px 0px 20px rgba(255, 0, 0, 0.7);
+    }
+
+    .scanner-card img {
+        width: 100%;
+        height: 100%;
+        border-radius: 10px;
+    }
+
+    /* Laser Scan Animation */
+    .laser {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: linear-gradient(to bottom, rgba(255, 0, 0, 0.8), rgba(255, 0, 0, 0));
+        box-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
+        animation: scan 5s ease-in-out infinite;
+    }
+
+    @keyframes scan {
+        0% { top: 0%; }
+        50% { top: 100%; }
+        100% { top: 0%; }
+    }
+
+    .card-content {
+        text-align: center;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.2);
+    }
+
+</style>
+{% endblock custom_css %}
+
 {% block content %}
 <div class="container text-center mt-5">
-    <div class="card shadow-lg p-5 bg-light rounded">
-        <h1 class="display-4 text-dark fw-bold">Welcome to 3D Face Authentication</h1>
-        <p class="lead text-muted">Secure your identity with advanced 3D face recognition.</p>
+    <div class="card-content shadow-lg p-5 rounded">
+        <h1 class="display-4 fw-bold">Welcome to Face Authentication</h1>
+        <p class="lead text-light">Secure your identity with advanced face recognition.</p>
 
-        <!-- 3D Hologram Section -->
-        <div id="hologram-container" style="width: 400px; height: 400px;"></div>
+        <div class="scanner-container">
+            <div class="scanner-card">
+                <img src="{% static 'images/mesh.jpg' %}" class="img-fluid">
+                <div class="laser"></div>
+            </div>
+        </div>
 
         <div class="mt-4">
-            <a href="{% url 'login' %}" class="btn btn-primary btn-lg me-2 px-4">Login</a>
-            <a href="{% url 'register' %}" class="btn btn-success btn-lg px-4">Register</a>
+            <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg me-2 px-4">Login</a>
+            <a href="{% url 'register' %}" class="btn btn-danger btn-lg px-4">Register</a>
         </div>
     </div>
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/OBJLoader.js"></script>
-
-<!-- Load Three.js as a module -->
-<script type="module">
-    import * as THREE from "/static/js/three.module.js";
-    import { MTLLoader } from "/static/js/MTLLoader.js";
-    import { OBJLoader } from "/static/js/OBJLoader.js";
-
-    document.addEventListener("DOMContentLoaded", function () {
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, 400 / 400, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ alpha: true });
-        renderer.setSize(400, 400);
-        document.getElementById("hologram-container").appendChild(renderer.domElement);
-
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 5, 5);
-        scene.add(directionalLight);
-
-        // Load OBJ with MTL
-        const mtlLoader = new MTLLoader();
-        mtlLoader.load('/static/models/face.mtl', function (materials) {
-            materials.preload();
-            const objLoader = new OBJLoader();
-            objLoader.setMaterials(materials);
-            objLoader.load('/static/models/face.obj', function (object) {
-                object.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        child.geometry.computeVertexNormals(); // Fix shading
-                        child.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
-                    }
-                });
-
-                object.scale.set(2, 2, 2);  // Adjust scale
-                object.position.set(0, -1, 0);
-                scene.add(object);
-            });
-        });
-
-        camera.position.z = 10;
-
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-        animate();
-    });
-</script>
 {% endblock %}
